@@ -1,0 +1,135 @@
+---
+title: 'Machine Learning Assignment'
+author: "Geons"
+date: "March 2016"
+output: html_document
+---
+
+##Synopsis
+###Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+###Objective
+
+In this project data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants is used to evaluate the correctness of exercise execution. The participants were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+The analysis aims to accurately predict the manner in which the participants did the exercise. 
+
+###Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+##Data Processing
+
+### Environment setup 
+
+```{r environment_setup, warning=FALSE}
+# I like to clean up before I start / tabula rasa (optional)
+rm(list=ls()) # this deletes all your env variables ... be very carefull!
+
+# Always make code visible
+echo = TRUE  
+
+# Turn off scientific notations for numbers
+options(scipen = 1)  
+options(digits=3)
+
+# Load needed libraries - can be done later as well 
+library(caret)
+library(corrplot)
+library(dplyr)
+library(randomForest)
+library(rpart)
+library(rattle)
+
+# check the workdir and reset if needed
+getwd()
+setwd("d:/005 Ouns/Statistics/Coursera/PML")
+```
+
+###Data Loading
+We load the data into R 
+```{r data_loading}
+# Specify URL's 
+workURL <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testURL <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+# Load the data
+work_DF <- read.csv(file=workURL, na.strings = c("NA", ""), stringsAsFactors=FALSE)
+test_DF <- read.csv(file=testURL, na.strings = c("NA", ""), stringsAsFactors=FALSE)
+```
+
+
+###Pre-Processing
+Data exploration indicates that significant amounts of data are missing, so it is wise to choose to eliminate the variables with missing data from the dataframes. 
+Furthermore the "X" variable and "user_name" variable (used exclusively for tracking purposes) are removed along with the time stamp and window variables (which show no relation to the classe variable. The dependent ("classe") variable is changed to a factor variable.
+
+```{r pre-processing}
+# removing variables with missing values
+work_DF <- work_DF[colSums(is.na(work_DF)) == 0]
+test_DF <- test_DF[colSums(is.na(test_DF)) == 0]
+
+# remove username, X, time stamp and window variables
+work_DF <- select(work_DF, -contains("timestamp"), -ends_with("window"), -starts_with("user"), -X)
+test_DF <- select(test_DF, -contains("timestamp"), -ends_with("window"), -starts_with("user"), -X)
+
+# set "classe" to a factor variable
+work_DF$classe <- as.factor(work_DF$classe)
+```
+
+The dataset is now split into a 60% training and 40% testing dataset.
+```{r split_dataset}
+seed <- as.numeric(as.Date("2016-03-12"))
+set.seed(seed)
+InternalTrain <- createDataPartition(work_DF$classe, p=0.6, list = FALSE)
+subTrain <- work_DF[InternalTrain,]
+subProbe <- work_DF[-InternalTrain,]
+```
+
+
+## Building the Decision Tree Model
+Using Decision Tree, we shouldn't expect the accuracy to be high. In fact, anything around 80% would be acceptable.
+
+```{r dTree}
+modFitDT <- rpart(classe ~ ., data = subTrain, method="class")
+fancyRpartPlot(modFitDT)
+```
+
+##Predicting with the Decision Tree Model
+```{r DT_prediction}
+set.seed(seed)
+
+prediction <- predict(modFitDT, subProbe, type = "class")
+confusionMatrix(prediction, subProbe$classe)
+```
+
+##Building the Random Forest Model
+Using random forest, the out of sample error should be small. The error will be estimated using the 40% testing sample. We should expect an error estimate of < 3%.
+
+```{r RF}
+set.seed(seed)
+modFitRF <- randomForest(classe ~ ., data = subTrain, ntree = 500)
+```
+##Predicting with the Random Forest Model
+```{r RF_prediction}
+prediction <- predict(modFitRF, subProbe, type = "class")
+confusionMatrix(prediction, subProbe$classe)
+```
+
+##Predicting on the Testing Data (pml-testing.csv) using the Random Forest Prediction
+ 
+```{r RF_Full}
+predictionRF <- predict(modFitRF, test_DF, type = "class")
+predictionRF
+```
+
+##Conclusion
+As can be seen from the confusion matrix the Random Forest model reaches an accuracy of more than 99%. 
+The accuracy rate of 99.4% is good and gives us an estimated out-of-sample error of 0.60%!
+
